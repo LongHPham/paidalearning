@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Math Race Game</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-color: #f7f7f7;
+    margin: 0;
+    padding: 0;
+  }
+  .game-container {
+    width: 90%;
+    max-width: 600px;
+    background-color: #ffffff;
+    padding: 40px;
+    border-radius: 15px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    text-align: center;
+  }
+  .question {
+    margin: 0 0 20px;
+    font-size: 28px;
+    font-weight: bold;
+  }
+  input[type="text"], button {
+    font-size: 18px;
+    padding: 10px;
+    border: 2px solid #007bff;
+    border-radius: 5px;
+    outline: none;
+  }
+  input[type="text"] {
+    width: calc(100% - 24px);
+    margin-bottom: 20px;
+  }
+  button {
+    width: 100%;
+    color: #ffffff;
+    background-color: #007bff;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  button:hover {
+    background-color: #0056b3;
+  }
+  .status-bar {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .timer, .score {
+    font-size: 20px;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+<div class="game-container">
+  <div class="status-bar">
+    <div class="timer">Time: 60s</div>
+    <div class="score">Score: 0</div>
+  </div>
+  <p id="question" class="question">Solve:</p>
+  <input type="text" id="answerInput" placeholder="Enter your answer here" autofocus>
+  <button id="submitAnswerBtn">Submit Answer</button>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    var socket = io();
+    let score = 0;
+    let timeLeft = 60; // Time in seconds
+
+    const timerElement = document.querySelector('.timer');
+    const scoreElement = document.querySelector('.score');
+
+    socket.on('progressUpdate', function(data) {
+      if(data.correct) {
+        score++;
+        scoreElement.textContent = `Score: ${score}`;
+        alert(`Correct!`);
+      } else {
+        alert(`Wrong answer. Try again!`);
+      }
+      document.getElementById('answerInput').value = ''; // Clear the input field
+    });
+
+    socket.on('newQuestion', function(data) {
+      document.getElementById('question').textContent = `Solve: ${data.question}`;
+    });
+
+    const submitAnswer = () => {
+      const answer = document.getElementById('answerInput').value;
+      socket.emit('submitAnswer', { player: 'Player 1', answer });
+    };
+
+    document.getElementById('submitAnswerBtn').addEventListener('click', submitAnswer);
+    document.getElementById('answerInput').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        submitAnswer();
+      }
+    });
+
+    // Countdown timer logic
+    const startTimer = () => {
+      const timer = setInterval(() => {
+        if (timeLeft <= 0) {
+          clearInterval(timer);
+          document.getElementById('submitAnswerBtn').disabled = true; // Disable submission when time is up
+          document.getElementById('answerInput').disabled = true;
+          alert(`Time's up! Your final score is ${score}.`);
+        } else {
+          timeLeft--;
+          timerElement.textContent = `Time: ${timeLeft}s`;
+        }
+      }, 1000);
+    };
+
+    startTimer(); // Start the countdown
+  });
+</script>
+</body>
+</html>
+
+
