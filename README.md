@@ -1,7 +1,12 @@
 # paidalearning
 Current Progress: 
 Developed single-player mode. There is no multiplayer mode available yet. 
-https://github.com/LongHPham/paidalearning/assets/71118130/12d481a3-f490-4cf3-bceb-936fd0762558
+
+
+
+
+https://github.com/LongHPham/paidalearning/assets/71118130/68be5842-fbda-4787-971c-36656ff458d2
+
 
 This is a math learning game where players can answer math questions by themselves or play with one other player(multiplayer). 
 
