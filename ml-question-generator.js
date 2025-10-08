@@ -16,6 +16,7 @@ class MLQuestionGenerator {
     this.trained = false;
     this.playerPerformanceHistory = new Map();
     this.questionDifficultyHistory = [];
+    this.playerQuestionHistory = new Map(); // Track questions per player
     
     this.trainModel();
   }
@@ -117,6 +118,9 @@ class MLQuestionGenerator {
   generateQuestionByDifficulty(difficulty, playerStats) {
     let operation, num1, num2;
     
+    // Get player's question history to avoid repetition
+    const playerHistory = this.getPlayerQuestionHistory(playerStats.playerId || 'shared');
+    
     if (difficulty === 'easy') {
       operation = Math.random() > 0.5 ? '+' : '-';
       num1 = Math.floor(Math.random() * 20) + 1;
@@ -139,6 +143,9 @@ class MLQuestionGenerator {
     const question = `${num1} ${operation} ${num2}`;
     const answer = this.calculateAnswer(num1, num2, operation);
     const complexity = this.calculateComplexity(num1, num2, operation);
+
+    // Store question in history
+    this.addToPlayerHistory(playerStats.playerId || 'shared', question);
 
     return {
       question,
@@ -254,6 +261,64 @@ class MLQuestionGenerator {
     } catch (error) {
       console.error('Error retraining model:', error);
     }
+  }
+
+  // Question history tracking methods
+  getPlayerQuestionHistory(playerId) {
+    return this.playerQuestionHistory.get(playerId) || [];
+  }
+
+  addToPlayerHistory(playerId, question) {
+    if (!this.playerQuestionHistory.has(playerId)) {
+      this.playerQuestionHistory.set(playerId, []);
+    }
+    
+    const history = this.playerQuestionHistory.get(playerId);
+    history.push(question);
+    
+    // Keep only last 20 questions to avoid memory issues
+    if (history.length > 20) {
+      history.shift();
+    }
+  }
+
+  // Adaptive difficulty based on performance
+  getAdaptiveDifficulty(playerId, currentAccuracy) {
+    const history = this.getPlayerQuestionHistory(playerId);
+    
+    // If accuracy is 60% or less, decrease difficulty
+    if (currentAccuracy <= 0.6) {
+      return 'easy';
+    }
+    
+    // If accuracy is 80% or higher, increase difficulty
+    if (currentAccuracy >= 0.8) {
+      return 'hard';
+    }
+    
+    // Default to medium
+    return 'medium';
+  }
+
+  // Generate question avoiding recent ones
+  generateUniqueQuestion(playerId, difficulty) {
+    const history = this.getPlayerQuestionHistory(playerId);
+    let attempts = 0;
+    const maxAttempts = 10;
+    
+    while (attempts < maxAttempts) {
+      const question = this.generateQuestionByDifficulty(difficulty, { playerId });
+      
+      // Check if this question was recently asked
+      if (!history.includes(question.question)) {
+        return question;
+      }
+      
+      attempts++;
+    }
+    
+    // If we can't find a unique question, return a regular one
+    return this.generateQuestionByDifficulty(difficulty, { playerId });
   }
 }
 

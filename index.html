@@ -436,6 +436,7 @@
 
     <div class="button-group">
       <button id="joinRoomBtn" class="btn-primary">Join Game Room</button>
+      <button id="playAgainBtn" class="btn-secondary" style="display: none;">Play Again</button>
       <button id="submitAnswerBtn" class="btn-success" disabled>Submit Answer</button>
     </div>
 
@@ -474,7 +475,7 @@
           <div class="stat-label">Avg Response</div>
         </div>
         <div class="stat-item">
-          <div class="stat-value" id="performanceTrend">-</div>
+          <div class="stat-value" id="performanceTrend" title="📈 Improving: Getting better | 📉 Declining: Getting worse | ➡️ Stable: Consistent performance">-</div>
           <div class="stat-label">Trend</div>
         </div>
       </div>
@@ -520,6 +521,25 @@ document.addEventListener('DOMContentLoaded', () => {
     performanceTrend: 'stable'
   };
 
+  // Load saved stats from localStorage
+  function loadPlayerStats() {
+    const saved = localStorage.getItem('mathGameStats');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        playerStats = { ...playerStats, ...parsed };
+        updatePlayerStats(playerStats);
+      } catch (e) {
+        console.log('Could not load saved stats');
+      }
+    }
+  }
+
+  // Save stats to localStorage
+  function savePlayerStats() {
+    localStorage.setItem('mathGameStats', JSON.stringify(playerStats));
+  }
+
   // DOM elements
   const elements = {
     gameState: document.getElementById('gameState'),
@@ -535,6 +555,7 @@ document.addEventListener('DOMContentLoaded', () => {
     questionTimer: document.getElementById('questionTimer'),
     answerInput: document.getElementById('answerInput'),
     joinRoomBtn: document.getElementById('joinRoomBtn'),
+    playAgainBtn: document.getElementById('playAgainBtn'),
     submitAnswerBtn: document.getElementById('submitAnswerBtn'),
     playersList: document.getElementById('playersList'),
     playersContainer: document.getElementById('playersContainer'),
@@ -586,7 +607,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const avgResponse = isNaN(playerStats.avgResponse) ? 0 : playerStats.avgResponse;
     elements.avgResponse.textContent = `${avgResponse.toFixed(1)}s`;
     
-    elements.performanceTrend.textContent = playerStats.performanceTrend;
+    // Improve trend display with emojis and better text
+    const trendText = {
+      'improving': '📈 Improving',
+      'declining': '📉 Declining', 
+      'stable': '➡️ Stable'
+    };
+    elements.performanceTrend.textContent = trendText[playerStats.performanceTrend] || '➡️ Stable';
+    
+    // Save to localStorage
+    savePlayerStats();
   }
 
   function startQuestionTimer() {
@@ -687,6 +717,9 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       showNotification(`Incorrect. Answer was ${data.correctAnswer}`, 'error');
     }
+    
+    // Refresh stats after each answer
+    socket.emit('getPlayerStats', {});
   });
 
   socket.on('roundResults', (data) => {
@@ -698,6 +731,10 @@ document.addEventListener('DOMContentLoaded', () => {
     updateGameState('finished', 'Game finished!');
     elements.answerInput.disabled = true;
     elements.submitAnswerBtn.disabled = true;
+    
+    // Show play again button
+    elements.playAgainBtn.style.display = 'block';
+    elements.joinRoomBtn.style.display = 'none';
     
     const winner = data.results[0];
     if (winner.playerId === playerId) {
@@ -718,7 +755,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="leaderboard-item">
         <div class="leaderboard-rank">#${index + 1}</div>
         <div class="leaderboard-player">${player.playerId.substring(0, 12)}...</div>
-        <div class="leaderboard-score">${player.totalScore}</div>
+        <div class="leaderboard-score">${Math.round(player.totalScore)}</div>
       </div>
     `).join('');
   });
@@ -746,6 +783,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Ready button removed - game starts automatically
 
+  elements.playAgainBtn.addEventListener('click', () => {
+    // Reset UI for new game
+    elements.playAgainBtn.style.display = 'none';
+    elements.joinRoomBtn.style.display = 'block';
+    elements.joinRoomBtn.disabled = false;
+    elements.joinRoomBtn.textContent = 'Join Game Room';
+    
+    // Reset game state
+    updateGameState('connected', 'Ready to join a new game!');
+    
+    // Reset stats display
+    updatePlayerStats({
+      score: 0,
+      accuracy: 0,
+      responseTime: 0,
+      totalScore: 0,
+      totalAccuracy: 0,
+      avgResponse: 0,
+      performanceTrend: 'stable'
+    });
+    
+    showNotification('Ready for a new game!', 'info');
+  });
+
   elements.submitAnswerBtn.addEventListener('click', () => {
     const answer = elements.answerInput.value.trim();
     if (answer) {
@@ -772,6 +833,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Load initial data
+  loadPlayerStats(); // Load saved stats from localStorage
   socket.emit('getLeaderboard', { limit: 10 });
   socket.emit('getPlayerStats', {});
 });

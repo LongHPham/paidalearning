@@ -192,8 +192,13 @@ class GameRoom {
     
     this.roundNumber++;
     
-    // Generate ONE shared question for all players
-    const question = mlGenerator.generateQuestion('shared', {});
+    // Generate ONE shared question for all players with adaptive difficulty
+    // Use the average accuracy of all players to determine difficulty
+    const avgAccuracy = Array.from(this.players.values())
+      .reduce((sum, player) => sum + (player.accuracy || 0.7), 0) / this.players.size;
+    
+    const adaptiveDifficulty = mlGenerator.getAdaptiveDifficulty('shared', avgAccuracy);
+    const question = mlGenerator.generateUniqueQuestion('shared', adaptiveDifficulty);
     
     // Store question with timestamp
     this.currentQuestion = question;
@@ -447,7 +452,29 @@ io.on('connection', async (socket) => {
   // Get leaderboard
   socket.on('getLeaderboard', async (data) => {
     try {
-      const leaderboard = scoringSystem.getLeaderboard(data.limit || 10);
+      let leaderboard = scoringSystem.getLeaderboard(data.limit || 10);
+      
+      // Include current game players if they're not in the main leaderboard
+      const currentGamePlayers = [];
+      for (const [roomId, room] of gameRooms) {
+        for (const [playerId, player] of room.players) {
+          if (!leaderboard.find(p => p.playerId === playerId)) {
+            currentGamePlayers.push({
+              playerId,
+              totalScore: player.score,
+              accuracy: player.accuracy,
+              avgResponseTime: player.avgResponseTime,
+              performanceTrend: 'stable'
+            });
+          }
+        }
+      }
+      
+      // Combine and sort
+      leaderboard = [...leaderboard, ...currentGamePlayers]
+        .sort((a, b) => b.totalScore - a.totalScore)
+        .slice(0, data.limit || 10);
+      
       socket.emit('leaderboard', {
         leaderboard
       });
@@ -459,7 +486,24 @@ io.on('connection', async (socket) => {
   // Get player stats
   socket.on('getPlayerStats', async (data) => {
     try {
-      const stats = scoringSystem.getPlayerStats(playerId);
+      const session = playerSessions.get(playerId);
+      let stats = scoringSystem.getPlayerStats(playerId);
+      
+      // If player is in a room, get current game stats
+      if (session && session.currentRoom) {
+        const room = gameRooms.get(session.currentRoom);
+        if (room && room.players.has(playerId)) {
+          const player = room.players.get(playerId);
+          stats = {
+            ...stats,
+            totalScore: player.score,
+            recentAccuracy: player.accuracy,
+            avgResponseTime: player.avgResponseTime,
+            performanceTrend: stats.performanceTrend
+          };
+        }
+      }
+      
       socket.emit('playerStats', {
         stats
       });
