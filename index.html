@@ -436,7 +436,6 @@
 
     <div class="button-group">
       <button id="joinRoomBtn" class="btn-primary">Join Game Room</button>
-      <button id="readyBtn" class="btn-secondary" disabled>Ready</button>
       <button id="submitAnswerBtn" class="btn-success" disabled>Submit Answer</button>
     </div>
 
@@ -536,7 +535,6 @@ document.addEventListener('DOMContentLoaded', () => {
     questionTimer: document.getElementById('questionTimer'),
     answerInput: document.getElementById('answerInput'),
     joinRoomBtn: document.getElementById('joinRoomBtn'),
-    readyBtn: document.getElementById('readyBtn'),
     submitAnswerBtn: document.getElementById('submitAnswerBtn'),
     playersList: document.getElementById('playersList'),
     playersContainer: document.getElementById('playersContainer'),
@@ -631,9 +629,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   socket.on('roomJoined', (data) => {
     currentRoom = data.roomId;
-    updateGameState('waiting', `Joined room ${data.roomId}. Players: ${data.playerCount}/${data.maxPlayers}`);
+    if (data.playerCount < data.maxPlayers) {
+      updateGameState('waiting', `Joined room ${data.roomId}. Waiting for another player...`);
+    } else {
+      updateGameState('waiting', `Room full! Game starting soon...`);
+    }
     elements.joinRoomBtn.disabled = true;
-    elements.readyBtn.disabled = false;
     showNotification(`Joined room ${data.roomId}`, 'success');
   });
 
@@ -642,25 +643,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   socket.on('playerJoined', (data) => {
-    updateGameState('waiting', `Room ${currentRoom}. Players: ${data.playerCount}/2`);
-    showNotification(`Player ${data.playerId.substring(0, 8)} joined`, 'info');
+    updateGameState('waiting', `Room ${currentRoom}. Players: ${data.playerCount}/2 - Game starting soon!`);
+    showNotification(`Player ${data.playerId.substring(0, 8)} joined - Game starting!`, 'info');
   });
 
   socket.on('playerLeft', (data) => {
     showNotification(`Player ${data.playerId.substring(0, 8)} left`, 'info');
   });
 
-  socket.on('playerReady', (data) => {
-    if (data.allReady) {
-      updateGameState('playing', 'All players ready! Game starting...');
-      elements.readyBtn.disabled = true;
-      elements.readyBtn.textContent = 'Game Started';
-      elements.answerInput.disabled = false;
-      elements.answerInput.focus();
-    } else {
-      showNotification(`Player ${data.playerId.substring(0, 8)} is ready`, 'info');
-    }
-  });
+  // Player ready functionality removed - game starts automatically
 
   socket.on('newQuestion', (data) => {
     elements.question.textContent = `Solve: ${data.question}`;
@@ -708,10 +699,6 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.answerInput.disabled = true;
     elements.submitAnswerBtn.disabled = true;
     
-    // Reset ready button for new game
-    elements.readyBtn.disabled = false;
-    elements.readyBtn.textContent = 'Ready';
-    
     const winner = data.results[0];
     if (winner.playerId === playerId) {
       showNotification('🎉 You won!', 'success');
@@ -757,11 +744,7 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.emit('joinRoom', { roomId: 'default' });
   });
 
-  elements.readyBtn.addEventListener('click', () => {
-    socket.emit('playerReady', {});
-    elements.readyBtn.disabled = true;
-    showNotification('You are ready!', 'success');
-  });
+  // Ready button removed - game starts automatically
 
   elements.submitAnswerBtn.addEventListener('click', () => {
     const answer = elements.answerInput.value.trim();

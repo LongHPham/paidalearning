@@ -279,23 +279,26 @@ class GameRoom {
       .every(p => p.questionsAnswered >= this.roundNumber);
     
     if (allAnswered) {
-      // Send round results to all players
-      const roundResults = Array.from(this.players.entries()).map(([id, p]) => ({
-        playerId: id,
-        score: p.score,
-        accuracy: p.correctAnswers / p.questionsAnswered
-      }));
-      
-      // Send round results to all players in the room
-      for (const [playerId, player] of this.players) {
-        player.socket.emit('roundResults', {
-          round: this.roundNumber,
-          results: roundResults
-        });
-      }
-      
-      // Wait a bit then start next round
-      setTimeout(() => this.nextRound(), 3000);
+      // Wait for players to see their individual results before showing round complete
+      setTimeout(() => {
+        // Send round results to all players
+        const roundResults = Array.from(this.players.entries()).map(([id, p]) => ({
+          playerId: id,
+          score: p.score,
+          accuracy: p.correctAnswers / p.questionsAnswered
+        }));
+        
+        // Send round results to all players in the room
+        for (const [playerId, player] of this.players) {
+          player.socket.emit('roundResults', {
+            round: this.roundNumber,
+            results: roundResults
+          });
+        }
+        
+        // Wait a bit then start next round
+        setTimeout(() => this.nextRound(), 2000);
+      }, 2000); // 2 second delay to show individual results
     }
   }
 
@@ -391,9 +394,9 @@ io.on('connection', async (socket) => {
             playerCount: room.players.size
           });
           
-          // If room is full, start game
+          // If room is full, start game immediately
           if (room.players.size === MAX_PLAYERS_PER_ROOM) {
-            setTimeout(() => room.startGame(), 2000);
+            setTimeout(() => room.startGame(), 1000);
           }
         } else {
           socket.emit('roomFull', {
@@ -409,25 +412,7 @@ io.on('connection', async (socket) => {
     }
   });
 
-  // Player ready
-  socket.on('playerReady', async (data) => {
-    const session = playerSessions.get(playerId);
-    if (session && session.currentRoom) {
-      const room = gameRooms.get(session.currentRoom);
-      if (room) {
-        room.setPlayerReady(playerId);
-        
-        socket.to(session.currentRoom).emit('playerReady', {
-          playerId,
-          allReady: room.allPlayersReady()
-        });
-        
-        if (room.allPlayersReady() && room.players.size === MAX_PLAYERS_PER_ROOM) {
-          setTimeout(() => room.startGame(), 1000);
-        }
-      }
-    }
-  });
+  // Player ready - removed, game starts automatically when 2 players join
 
   // Submit answer
   socket.on('submitAnswer', async (data) => {
