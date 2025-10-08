@@ -2,129 +2,765 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Math Race Game</title>
+<title>Enhanced Math Race Game - ML Powered</title>
 <script src="/socket.io/socket.io.js"></script>
 <style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
   body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 100vh;
-    background-color: #f7f7f7;
-    margin: 0;
-    padding: 0;
+    padding: 20px;
   }
+
+  .main-container {
+    width: 100%;
+    max-width: 1200px;
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 20px;
+  }
+
   .game-container {
-    width: 90%;
-    max-width: 600px;
     background-color: #ffffff;
-    padding: 40px;
-    border-radius: 15px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    padding: 30px;
+    border-radius: 20px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
     text-align: center;
   }
-  .question {
-    margin: 0 0 20px;
-    font-size: 28px;
+
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .panel {
+    background-color: #ffffff;
+    padding: 20px;
+    border-radius: 15px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  }
+
+  .game-header {
+    margin-bottom: 30px;
+  }
+
+  .game-title {
+    font-size: 2.5em;
     font-weight: bold;
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 10px;
   }
-  input[type="text"], button {
-    font-size: 18px;
-    padding: 10px;
-    border: 2px solid #007bff;
-    border-radius: 5px;
-    outline: none;
+
+  .game-subtitle {
+    color: #666;
+    font-size: 1.1em;
   }
-  input[type="text"] {
-    width: calc(100% - 24px);
-    margin-bottom: 20px;
-  }
-  button {
-    width: 100%;
-    color: #ffffff;
-    background-color: #007bff;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-  }
-  button:hover {
-    background-color: #0056b3;
-  }
+
   .status-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+    margin-bottom: 30px;
+  }
+
+  .status-item {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+    padding: 15px;
+    border-radius: 10px;
+    font-weight: bold;
+    text-align: center;
+  }
+
+  .status-label {
+    font-size: 0.9em;
+    opacity: 0.9;
+  }
+
+  .status-value {
+    font-size: 1.3em;
+    margin-top: 5px;
+  }
+
+  .question-container {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    color: white;
+    padding: 30px;
+    border-radius: 15px;
+    margin-bottom: 30px;
+  }
+
+  .question {
+    font-size: 2.5em;
+    font-weight: bold;
+    margin-bottom: 10px;
+  }
+
+  .question-meta {
     display: flex;
     justify-content: space-between;
+    font-size: 1.1em;
+    opacity: 0.9;
+  }
+
+  .input-container {
     margin-bottom: 20px;
   }
-  .timer, .score {
-    font-size: 20px;
+
+  input[type="text"] {
+    width: 100%;
+    font-size: 1.5em;
+    padding: 15px 20px;
+    border: 3px solid #667eea;
+    border-radius: 10px;
+    outline: none;
+    text-align: center;
+    transition: all 0.3s ease;
+  }
+
+  input[type="text"]:focus {
+    border-color: #764ba2;
+    box-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
+  }
+
+  .button-group {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+  }
+
+  button {
+    flex: 1;
+    font-size: 1.2em;
+    padding: 15px 25px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
     font-weight: bold;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+  }
+
+  .btn-secondary {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+  }
+
+  .btn-secondary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(240, 147, 251, 0.3);
+  }
+
+  .btn-success {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    color: white;
+  }
+
+  .btn-success:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(79, 172, 254, 0.3);
+  }
+
+  button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+  }
+
+  .game-state {
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    font-weight: bold;
+    text-align: center;
+  }
+
+  .state-waiting {
+    background: linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%);
+    color: #2d3436;
+  }
+
+  .state-playing {
+    background: linear-gradient(135deg, #00b894 0%, #00cec9 100%);
+    color: white;
+  }
+
+  .state-finished {
+    background: linear-gradient(135deg, #e17055 0%, #d63031 100%);
+    color: white;
+  }
+
+  .players-list {
+    margin-bottom: 20px;
+  }
+
+  .player-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    margin-bottom: 10px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #667eea;
+  }
+
+  .player-name {
+    font-weight: bold;
+  }
+
+  .player-score {
+    color: #667eea;
+    font-weight: bold;
+  }
+
+  .leaderboard {
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .leaderboard-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 8px;
+    border-left: 4px solid #667eea;
+  }
+
+  .leaderboard-rank {
+    font-weight: bold;
+    color: #667eea;
+    min-width: 30px;
+  }
+
+  .leaderboard-player {
+    flex: 1;
+    margin-left: 10px;
+  }
+
+  .leaderboard-score {
+    font-weight: bold;
+    color: #28a745;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 15px;
+  }
+
+  .stat-item {
+    text-align: center;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 8px;
+  }
+
+  .stat-value {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #667eea;
+  }
+
+  .stat-label {
+    font-size: 0.9em;
+    color: #666;
+  }
+
+  .notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 20px;
+    border-radius: 10px;
+    color: white;
+    font-weight: bold;
+    z-index: 1000;
+    transform: translateX(400px);
+    transition: transform 0.3s ease;
+  }
+
+  .notification.show {
+    transform: translateX(0);
+  }
+
+  .notification.success {
+    background: linear-gradient(135deg, #00b894 0%, #00cec9 100%);
+  }
+
+  .notification.error {
+    background: linear-gradient(135deg, #e17055 0%, #d63031 100%);
+  }
+
+  .notification.info {
+    background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
+  }
+
+  .round-progress {
+    margin-bottom: 20px;
+  }
+
+  .progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    transition: width 0.3s ease;
+  }
+
+  .difficulty-indicator {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-size: 0.9em;
+    font-weight: bold;
+    margin-left: 10px;
+  }
+
+  .difficulty-easy {
+    background: #d4edda;
+    color: #155724;
+  }
+
+  .difficulty-medium {
+    background: #fff3cd;
+    color: #856404;
+  }
+
+  .difficulty-hard {
+    background: #f8d7da;
+    color: #721c24;
+  }
+
+  @media (max-width: 768px) {
+    .main-container {
+      grid-template-columns: 1fr;
+    }
+    
+    .game-title {
+      font-size: 2em;
+    }
+    
+    .question {
+      font-size: 2em;
+    }
+    
+    .button-group {
+      flex-direction: column;
+    }
   }
 </style>
 </head>
 <body>
-<div class="game-container">
-  <div class="status-bar">
-    <div class="timer">Time: 60s</div>
-    <div class="score">Score: 0</div>
+<div class="main-container">
+  <div class="game-container">
+    <div class="game-header">
+      <h1 class="game-title">🧠 ML-Powered Math Race</h1>
+      <p class="game-subtitle">Real-time competitive math game with AI-driven difficulty</p>
+    </div>
+
+    <div id="gameState" class="game-state state-waiting">
+      <div id="stateMessage">Connecting to game server...</div>
+    </div>
+
+    <div class="status-bar">
+      <div class="status-item">
+        <div class="status-label">Round</div>
+        <div class="status-value" id="roundDisplay">-</div>
+      </div>
+      <div class="status-item">
+        <div class="status-label">Your Score</div>
+        <div class="status-value" id="playerScore">0</div>
+      </div>
+      <div class="status-item">
+        <div class="status-label">Accuracy</div>
+        <div class="status-value" id="playerAccuracy">0%</div>
+      </div>
+      <div class="status-item">
+        <div class="status-label">Response Time</div>
+        <div class="status-value" id="responseTime">0s</div>
+      </div>
+    </div>
+
+    <div class="round-progress">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+      </div>
+      <div style="text-align: center; margin-top: 5px; font-size: 0.9em; color: #666;">
+        <span id="roundProgress">Round 0 of 10</span>
+      </div>
+    </div>
+
+    <div class="question-container">
+      <div id="question" class="question">Waiting for question...</div>
+      <div class="question-meta">
+        <span id="questionDifficulty">Difficulty: -</span>
+        <span id="questionTimer">Time: 0s</span>
+      </div>
+    </div>
+
+    <div class="input-container">
+      <input type="text" id="answerInput" placeholder="Enter your answer here" autofocus disabled>
+    </div>
+
+    <div class="button-group">
+      <button id="joinRoomBtn" class="btn-primary">Join Game Room</button>
+      <button id="readyBtn" class="btn-secondary" disabled>Ready</button>
+      <button id="submitAnswerBtn" class="btn-success" disabled>Submit Answer</button>
+    </div>
+
+    <div id="playersList" class="players-list" style="display: none;">
+      <h3>Players in Room</h3>
+      <div id="playersContainer"></div>
+    </div>
   </div>
-  <p id="question" class="question">Solve:</p>
-  <input type="text" id="answerInput" placeholder="Enter your answer here" autofocus>
-  <button id="submitAnswerBtn">Submit Answer</button>
+
+  <div class="sidebar">
+    <div class="panel">
+      <h3>🏆 Leaderboard</h3>
+      <div id="leaderboard" class="leaderboard">
+        <div style="text-align: center; color: #666; padding: 20px;">
+          Loading leaderboard...
+        </div>
+      </div>
+      <button id="refreshLeaderboard" class="btn-secondary" style="width: 100%; margin-top: 10px;">
+        Refresh
+      </button>
+    </div>
+
+    <div class="panel">
+      <h3>📊 Your Stats</h3>
+      <div id="playerStats" class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-value" id="totalScore">0</div>
+          <div class="stat-label">Total Score</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="totalAccuracy">0%</div>
+          <div class="stat-label">Accuracy</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="avgResponse">0s</div>
+          <div class="stat-label">Avg Response</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="performanceTrend">-</div>
+          <div class="stat-label">Trend</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>🎮 Game Info</h3>
+      <div style="font-size: 0.9em; color: #666; line-height: 1.6;">
+        <p><strong>🤖 ML Features:</strong></p>
+        <ul style="margin: 10px 0; padding-left: 20px;">
+          <li>AI-powered difficulty adjustment</li>
+          <li>Personalized question generation</li>
+          <li>Performance-based scoring</li>
+        </ul>
+        <p><strong>⚡ Real-time Features:</strong></p>
+        <ul style="margin: 10px 0; padding-left: 20px;">
+          <li>Competitive multiplayer</li>
+          <li>Live leaderboards</li>
+          <li>Instant feedback</li>
+        </ul>
+      </div>
+    </div>
+  </div>
 </div>
 
+<div id="notification" class="notification"></div>
+
 <script>
-  document.addEventListener('DOMContentLoaded', () => {
-    var socket = io();
-    let score = 0;
-    let timeLeft = 60; // Time in seconds
+document.addEventListener('DOMContentLoaded', () => {
+  const socket = io();
+  let gameState = 'disconnected';
+  let currentRoom = null;
+  let playerId = null;
+  let questionStartTime = null;
+  let questionTimer = null;
+  let playerStats = {
+    score: 0,
+    accuracy: 0,
+    responseTime: 0,
+    totalScore: 0,
+    totalAccuracy: 0,
+    avgResponse: 0,
+    performanceTrend: 'stable'
+  };
 
-    const timerElement = document.querySelector('.timer');
-    const scoreElement = document.querySelector('.score');
+  // DOM elements
+  const elements = {
+    gameState: document.getElementById('gameState'),
+    stateMessage: document.getElementById('stateMessage'),
+    roundDisplay: document.getElementById('roundDisplay'),
+    playerScore: document.getElementById('playerScore'),
+    playerAccuracy: document.getElementById('playerAccuracy'),
+    responseTime: document.getElementById('responseTime'),
+    progressFill: document.getElementById('progressFill'),
+    roundProgress: document.getElementById('roundProgress'),
+    question: document.getElementById('question'),
+    questionDifficulty: document.getElementById('questionDifficulty'),
+    questionTimer: document.getElementById('questionTimer'),
+    answerInput: document.getElementById('answerInput'),
+    joinRoomBtn: document.getElementById('joinRoomBtn'),
+    readyBtn: document.getElementById('readyBtn'),
+    submitAnswerBtn: document.getElementById('submitAnswerBtn'),
+    playersList: document.getElementById('playersList'),
+    playersContainer: document.getElementById('playersContainer'),
+    leaderboard: document.getElementById('leaderboard'),
+    refreshLeaderboard: document.getElementById('refreshLeaderboard'),
+    totalScore: document.getElementById('totalScore'),
+    totalAccuracy: document.getElementById('totalAccuracy'),
+    avgResponse: document.getElementById('avgResponse'),
+    performanceTrend: document.getElementById('performanceTrend'),
+    notification: document.getElementById('notification')
+  };
 
-    socket.on('progressUpdate', function(data) {
-      if(data.correct) {
-        score++;
-        scoreElement.textContent = `Score: ${score}`;
-        alert(`Correct!`);
-      } else {
-        alert(`Wrong answer. Try again!`);
-      }
-      document.getElementById('answerInput').value = ''; // Clear the input field
-    });
+  // Utility functions
+  function showNotification(message, type = 'info') {
+    elements.notification.textContent = message;
+    elements.notification.className = `notification ${type}`;
+    elements.notification.classList.add('show');
+    
+    setTimeout(() => {
+      elements.notification.classList.remove('show');
+    }, 3000);
+  }
 
-    socket.on('newQuestion', function(data) {
-      document.getElementById('question').textContent = `Solve: ${data.question}`;
-    });
+  function updateGameState(state, message) {
+    gameState = state;
+    elements.gameState.className = `game-state state-${state}`;
+    elements.stateMessage.textContent = message;
+  }
 
-    const submitAnswer = () => {
-      const answer = document.getElementById('answerInput').value;
-      socket.emit('submitAnswer', { player: 'Player 1', answer });
-    };
+  function updatePlayerStats(stats) {
+    playerStats = { ...playerStats, ...stats };
+    elements.playerScore.textContent = playerStats.score;
+    elements.playerAccuracy.textContent = `${Math.round(playerStats.accuracy * 100)}%`;
+    elements.responseTime.textContent = `${playerStats.responseTime.toFixed(1)}s`;
+    elements.totalScore.textContent = playerStats.totalScore;
+    elements.totalAccuracy.textContent = `${Math.round(playerStats.totalAccuracy * 100)}%`;
+    elements.avgResponse.textContent = `${playerStats.avgResponse.toFixed(1)}s`;
+    elements.performanceTrend.textContent = playerStats.performanceTrend;
+  }
 
-    document.getElementById('submitAnswerBtn').addEventListener('click', submitAnswer);
-    document.getElementById('answerInput').addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') {
-        submitAnswer();
-      }
-    });
+  function startQuestionTimer() {
+    questionStartTime = Date.now();
+    questionTimer = setInterval(() => {
+      const elapsed = (Date.now() - questionStartTime) / 1000;
+      elements.questionTimer.textContent = `Time: ${elapsed.toFixed(1)}s`;
+    }, 100);
+  }
 
-    // Countdown timer logic
-    const startTimer = () => {
-      const timer = setInterval(() => {
-        if (timeLeft <= 0) {
-          clearInterval(timer);
-          document.getElementById('submitAnswerBtn').disabled = true; // Disable submission when time is up
-          document.getElementById('answerInput').disabled = true;
-          alert(`Time's up! Your final score is ${score}.`);
-        } else {
-          timeLeft--;
-          timerElement.textContent = `Time: ${timeLeft}s`;
-        }
-      }, 1000);
-    };
+  function stopQuestionTimer() {
+    if (questionTimer) {
+      clearInterval(questionTimer);
+      questionTimer = null;
+    }
+  }
 
-    startTimer(); // Start the countdown
+  function updateDifficultyDisplay(difficulty) {
+    const difficultyClass = `difficulty-${difficulty}`;
+    const difficultyText = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+    elements.questionDifficulty.innerHTML = `Difficulty: <span class="difficulty-indicator ${difficultyClass}">${difficultyText}</span>`;
+  }
+
+  // Socket event handlers
+  socket.on('connect', () => {
+    playerId = socket.id;
+    updateGameState('connected', 'Connected! Join a room to start playing.');
+    showNotification('Connected to game server!', 'success');
   });
+
+  socket.on('disconnect', () => {
+    updateGameState('disconnected', 'Disconnected from server. Reconnecting...');
+    showNotification('Disconnected from server', 'error');
+  });
+
+  socket.on('roomJoined', (data) => {
+    currentRoom = data.roomId;
+    updateGameState('waiting', `Joined room ${data.roomId}. Players: ${data.playerCount}/${data.maxPlayers}`);
+    elements.joinRoomBtn.disabled = true;
+    elements.readyBtn.disabled = false;
+    showNotification(`Joined room ${data.roomId}`, 'success');
+  });
+
+  socket.on('roomFull', (data) => {
+    showNotification(data.message, 'error');
+  });
+
+  socket.on('playerJoined', (data) => {
+    updateGameState('waiting', `Room ${currentRoom}. Players: ${data.playerCount}/2`);
+    showNotification(`Player ${data.playerId.substring(0, 8)} joined`, 'info');
+  });
+
+  socket.on('playerLeft', (data) => {
+    showNotification(`Player ${data.playerId.substring(0, 8)} left`, 'info');
+  });
+
+  socket.on('playerReady', (data) => {
+    if (data.allReady) {
+      updateGameState('playing', 'All players ready! Game starting...');
+      elements.readyBtn.disabled = true;
+      elements.answerInput.disabled = false;
+      elements.answerInput.focus();
+    } else {
+      showNotification(`Player ${data.playerId.substring(0, 8)} is ready`, 'info');
+    }
+  });
+
+  socket.on('newQuestion', (data) => {
+    elements.question.textContent = `Solve: ${data.question}`;
+    elements.roundDisplay.textContent = data.round;
+    elements.roundProgress.textContent = `Round ${data.round} of ${data.totalRounds}`;
+    elements.progressFill.style.width = `${(data.round / data.totalRounds) * 100}%`;
+    
+    updateDifficultyDisplay(data.difficulty);
+    elements.answerInput.value = '';
+    elements.answerInput.disabled = false;
+    elements.answerInput.focus();
+    elements.submitAnswerBtn.disabled = false;
+    
+    startQuestionTimer();
+    showNotification(`Round ${data.round} - ${data.difficulty} difficulty`, 'info');
+  });
+
+  socket.on('answerResult', (data) => {
+    stopQuestionTimer();
+    elements.answerInput.disabled = true;
+    elements.submitAnswerBtn.disabled = true;
+    
+    const responseTime = data.responseTime;
+    updatePlayerStats({
+      score: data.totalScore,
+      responseTime: responseTime
+    });
+    
+    if (data.correct) {
+      showNotification(`Correct! +${data.score} points`, 'success');
+    } else {
+      showNotification(`Incorrect. Answer was ${data.correctAnswer}`, 'error');
+    }
+  });
+
+  socket.on('roundResults', (data) => {
+    showNotification(`Round ${data.round} complete!`, 'info');
+    // Could display round results here
+  });
+
+  socket.on('gameEnd', (data) => {
+    updateGameState('finished', 'Game finished!');
+    elements.answerInput.disabled = true;
+    elements.submitAnswerBtn.disabled = true;
+    
+    const winner = data.results[0];
+    if (winner.playerId === playerId) {
+      showNotification('🎉 You won!', 'success');
+    } else {
+      showNotification('Game finished. Good try!', 'info');
+    }
+  });
+
+  socket.on('leaderboard', (data) => {
+    const leaderboard = data.leaderboard;
+    if (leaderboard.length === 0) {
+      elements.leaderboard.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No players yet</div>';
+      return;
+    }
+    
+    elements.leaderboard.innerHTML = leaderboard.map((player, index) => `
+      <div class="leaderboard-item">
+        <div class="leaderboard-rank">#${index + 1}</div>
+        <div class="leaderboard-player">${player.playerId.substring(0, 12)}...</div>
+        <div class="leaderboard-score">${player.totalScore}</div>
+      </div>
+    `).join('');
+  });
+
+  socket.on('playerStats', (data) => {
+    const stats = data.stats;
+    updatePlayerStats({
+      totalScore: stats.totalScore,
+      totalAccuracy: stats.recentAccuracy,
+      avgResponse: stats.avgResponseTime,
+      performanceTrend: stats.performanceTrend
+    });
+  });
+
+  socket.on('error', (data) => {
+    showNotification(data.message, 'error');
+  });
+
+  // Handle acknowledgment messages for UDP-like communication
+  socket.on('acknowledge', (data) => {
+    socket.emit('acknowledge', { messageId: data.messageId });
+  });
+
+  // Event listeners
+  elements.joinRoomBtn.addEventListener('click', () => {
+    socket.emit('joinRoom', { roomId: 'default' });
+  });
+
+  elements.readyBtn.addEventListener('click', () => {
+    socket.emit('playerReady', {});
+    elements.readyBtn.disabled = true;
+    showNotification('You are ready!', 'success');
+  });
+
+  elements.submitAnswerBtn.addEventListener('click', () => {
+    const answer = elements.answerInput.value.trim();
+    if (answer) {
+      socket.emit('submitAnswer', { answer });
+    }
+  });
+
+  elements.answerInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      elements.submitAnswerBtn.click();
+    }
+  });
+
+  elements.refreshLeaderboard.addEventListener('click', () => {
+    socket.emit('getLeaderboard', { limit: 10 });
+  });
+
+  // Load initial data
+  socket.emit('getLeaderboard', { limit: 10 });
+  socket.emit('getPlayerStats', {});
+});
 </script>
 </body>
 </html>
