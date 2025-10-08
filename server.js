@@ -116,7 +116,7 @@ class UDPLikeCommunicator {
   }
 }
 
-const udpCommunicator = new UDPLikeCommunicator(io);
+// UDP-like communicator removed - using simple Socket.IO messaging
 
 // Game room management
 class GameRoom {
@@ -192,26 +192,21 @@ class GameRoom {
     
     this.roundNumber++;
     
-    // Generate question for each player using ML
+    // Generate ONE shared question for all players
+    const question = mlGenerator.generateQuestion('shared', {});
+    
+    // Store question with timestamp
+    this.currentQuestion = question;
+    this.questionStartTime = Date.now();
+    
+    // Send the SAME question to all players
     for (const [playerId, player] of this.players) {
-      const playerStats = scoringSystem.getPlayerStats(playerId);
-      const question = mlGenerator.generateQuestion(playerId, playerStats);
-      
-      // Store question with timestamp
-      this.currentQuestion = question;
-      this.questionStartTime = Date.now();
-      
-      // Send question to player
-      await udpCommunicator.sendReliableMessage(
-        player.socket.id, 
-        'newQuestion', 
-        { 
-          question: question.question, 
-          round: this.roundNumber,
-          totalRounds: this.maxRounds,
-          difficulty: question.difficulty
-        }
-      );
+      player.socket.emit('newQuestion', { 
+        question: question.question, 
+        round: this.roundNumber,
+        totalRounds: this.maxRounds,
+        difficulty: question.difficulty
+      });
     }
   }
 
@@ -219,40 +214,53 @@ class GameRoom {
     const player = this.players.get(playerId);
     if (!player || !this.currentQuestion) return;
     
+    console.log(`Player ${playerId} answered: ${answer}`);
+    console.log(`Current question: ${this.currentQuestion.question}`);
+    console.log(`Correct answer: ${this.currentQuestion.answer}`);
+    
     const isCorrect = answer === this.currentQuestion.answer;
-    const score = scoringSystem.calculateScore(
-      playerId, 
-      this.currentQuestion, 
-      isCorrect, 
-      responseTime, 
-      this.roomId
-    );
+    let score = 0;
+    
+    try {
+      score = scoringSystem.calculateScore(
+        playerId, 
+        this.currentQuestion, 
+        isCorrect, 
+        responseTime, 
+        this.roomId
+      );
+    } catch (scoreError) {
+      console.error('Scoring error:', scoreError);
+      // Fallback scoring
+      score = isCorrect ? 100 : 0;
+    }
     
     // Update player stats
     player.score += score;
     player.questionsAnswered++;
     if (isCorrect) player.correctAnswers++;
     
-    // Update ML system with performance data
-    mlGenerator.updatePlayerPerformance(
-      playerId, 
-      this.currentQuestion, 
-      isCorrect, 
-      responseTime
-    );
+    // Update ML system with performance data (with error handling)
+    try {
+      mlGenerator.updatePlayerPerformance(
+        playerId, 
+        this.currentQuestion, 
+        isCorrect, 
+        responseTime
+      );
+    } catch (mlError) {
+      console.error('ML update error:', mlError);
+      // Continue without ML update
+    }
     
     // Send result to player
-    await udpCommunicator.sendReliableMessage(
-      player.socket.id,
-      'answerResult',
-      {
-        correct: isCorrect,
-        score: score,
-        totalScore: player.score,
-        correctAnswer: this.currentQuestion.answer,
-        responseTime: responseTime
-      }
-    );
+    player.socket.emit('answerResult', {
+      correct: isCorrect,
+      score: score,
+      totalScore: player.score,
+      correctAnswer: this.currentQuestion.answer,
+      responseTime: responseTime
+    });
     
     // Check if all players have answered
     const allAnswered = Array.from(this.players.values())
@@ -266,10 +274,13 @@ class GameRoom {
         accuracy: p.correctAnswers / p.questionsAnswered
       }));
       
-      udpCommunicator.broadcastToRoom(this.roomId, 'roundResults', {
-        round: this.roundNumber,
-        results: roundResults
-      });
+      // Send round results to all players in the room
+      for (const [playerId, player] of this.players) {
+        player.socket.emit('roundResults', {
+          round: this.roundNumber,
+          results: roundResults
+        });
+      }
       
       // Wait a bit then start next round
       setTimeout(() => this.nextRound(), 3000);
@@ -287,11 +298,13 @@ class GameRoom {
       avgResponseTime: player.avgResponseTime
     })).sort((a, b) => b.finalScore - a.finalScore);
     
-    // Send final results
-    udpCommunicator.broadcastToRoom(this.roomId, 'gameEnd', {
-      results: finalResults,
-      duration: Date.now() - this.gameStartTime
-    });
+    // Send final results to all players
+    for (const [playerId, player] of this.players) {
+      player.socket.emit('gameEnd', {
+        results: finalResults,
+        duration: Date.now() - this.gameStartTime
+      });
+    }
     
     // Clean up after delay
     setTimeout(() => {
@@ -308,12 +321,29 @@ io.on('connection', async (socket) => {
   playerSessions.set(playerId, {
     socket,
     currentRoom: null,
-    connectedAt: Date.now()
+    connectedAt: Date.now(),
+    lastPing: Date.now()
   });
 
-  // Handle acknowledgment messages
+  // Set up ping/pong to keep connection alive
+  const pingInterval = setInterval(() => {
+    if (socket.connected) {
+      socket.emit('ping');
+    } else {
+      clearInterval(pingInterval);
+    }
+  }, 30000); // Ping every 30 seconds
+
+  socket.on('pong', () => {
+    const session = playerSessions.get(playerId);
+    if (session) {
+      session.lastPing = Date.now();
+    }
+  });
+
+  // Handle acknowledgment messages (simplified)
   socket.on('acknowledge', (data) => {
-    udpCommunicator.handleAcknowledgment(socket.id, data.messageId);
+    // No longer needed with simplified communication
   });
 
   // Join game room
@@ -337,14 +367,14 @@ io.on('connection', async (socket) => {
         if (success) {
           playerSessions.get(playerId).currentRoom = roomId;
           
-          await udpCommunicator.sendReliableMessage(socket.id, 'roomJoined', {
+          socket.emit('roomJoined', {
             roomId,
             playerCount: room.players.size,
             maxPlayers: MAX_PLAYERS_PER_ROOM
           });
           
           // Notify other players
-          udpCommunicator.broadcastToRoom(roomId, 'playerJoined', {
+          socket.to(roomId).emit('playerJoined', {
             playerId,
             playerCount: room.players.size
           });
@@ -354,7 +384,7 @@ io.on('connection', async (socket) => {
             setTimeout(() => room.startGame(), 2000);
           }
         } else {
-          await udpCommunicator.sendReliableMessage(socket.id, 'roomFull', {
+          socket.emit('roomFull', {
             message: 'Room is full'
           });
         }
@@ -375,7 +405,7 @@ io.on('connection', async (socket) => {
       if (room) {
         room.setPlayerReady(playerId);
         
-        udpCommunicator.broadcastToRoom(session.currentRoom, 'playerReady', {
+        socket.to(session.currentRoom).emit('playerReady', {
           playerId,
           allReady: room.allPlayersReady()
         });
@@ -391,21 +421,28 @@ io.on('connection', async (socket) => {
   socket.on('submitAnswer', async (data) => {
     try {
       const session = playerSessions.get(playerId);
-      if (!session || !session.currentRoom) return;
+      if (!session || !session.currentRoom) {
+        console.log(`No session or room for player ${playerId}`);
+        return;
+      }
       
       const room = gameRooms.get(session.currentRoom);
-      if (!room || room.gameState !== 'playing') return;
+      if (!room || room.gameState !== 'playing') {
+        console.log(`Room not found or not playing for player ${playerId}`);
+        return;
+      }
       
       const responseTime = room.questionStartTime ? 
         (Date.now() - room.questionStartTime) / 1000 : 0;
       
-      // Process answer in thread pool for concurrency
-      await concurrencyManager.executeInThread(async () => {
-        await room.processAnswer(playerId, data.answer, responseTime);
-      }, 'high');
+      console.log(`Processing answer for player ${playerId}: ${data.answer}`);
+      
+      // Process answer directly to avoid thread pool issues
+      await room.processAnswer(playerId, data.answer, responseTime);
       
     } catch (error) {
       console.error('Error processing answer:', error);
+      // Send error to client but don't disconnect
       socket.emit('error', { message: 'Failed to process answer' });
     }
   });
@@ -414,7 +451,7 @@ io.on('connection', async (socket) => {
   socket.on('getLeaderboard', async (data) => {
     try {
       const leaderboard = scoringSystem.getLeaderboard(data.limit || 10);
-      await udpCommunicator.sendReliableMessage(socket.id, 'leaderboard', {
+      socket.emit('leaderboard', {
         leaderboard
       });
     } catch (error) {
@@ -426,7 +463,7 @@ io.on('connection', async (socket) => {
   socket.on('getPlayerStats', async (data) => {
     try {
       const stats = scoringSystem.getPlayerStats(playerId);
-      await udpCommunicator.sendReliableMessage(socket.id, 'playerStats', {
+      socket.emit('playerStats', {
         stats
       });
     } catch (error) {
@@ -445,7 +482,7 @@ io.on('connection', async (socket) => {
         room.removePlayer(playerId);
         
         // Notify other players
-        udpCommunicator.broadcastToRoom(session.currentRoom, 'playerLeft', {
+        socket.to(session.currentRoom).emit('playerLeft', {
           playerId
         });
         

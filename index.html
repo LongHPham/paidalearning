@@ -605,6 +605,11 @@ document.addEventListener('DOMContentLoaded', () => {
     showNotification('Connected to game server!', 'success');
   });
 
+  // Handle ping/pong for connection keep-alive
+  socket.on('ping', () => {
+    socket.emit('pong');
+  });
+
   socket.on('disconnect', () => {
     updateGameState('disconnected', 'Disconnected from server. Reconnecting...');
     showNotification('Disconnected from server', 'error');
@@ -724,10 +729,7 @@ document.addEventListener('DOMContentLoaded', () => {
     showNotification(data.message, 'error');
   });
 
-  // Handle acknowledgment messages for UDP-like communication
-  socket.on('acknowledge', (data) => {
-    socket.emit('acknowledge', { messageId: data.messageId });
-  });
+  // Acknowledgment handling removed - using simple Socket.IO messaging
 
   // Event listeners
   elements.joinRoomBtn.addEventListener('click', () => {
@@ -743,7 +745,15 @@ document.addEventListener('DOMContentLoaded', () => {
   elements.submitAnswerBtn.addEventListener('click', () => {
     const answer = elements.answerInput.value.trim();
     if (answer) {
-      socket.emit('submitAnswer', { answer });
+      try {
+        socket.emit('submitAnswer', { answer });
+        elements.submitAnswerBtn.disabled = true;
+        elements.answerInput.disabled = true;
+        showNotification('Answer submitted!', 'info');
+      } catch (error) {
+        console.error('Error submitting answer:', error);
+        showNotification('Failed to submit answer', 'error');
+      }
     }
   });
 

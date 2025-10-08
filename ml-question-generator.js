@@ -25,7 +25,8 @@ class MLQuestionGenerator {
     const labels = [];
     
     // Generate synthetic training data based on question characteristics
-    for (let i = 0; i < 1000; i++) {
+    // Reduced size to avoid ML library issues
+    for (let i = 0; i < 100; i++) {
       const operation = ['+', '-', '*', '/'][Math.floor(Math.random() * 4)];
       const num1 = Math.floor(Math.random() * 100) + 1;
       const num2 = Math.floor(Math.random() * 100) + 1;
@@ -73,6 +74,7 @@ class MLQuestionGenerator {
       console.log('ML Question Generator trained successfully');
     } catch (error) {
       console.error('Error training ML model:', error);
+      console.log('Falling back to rule-based question generation');
       this.trained = false;
     }
   }
