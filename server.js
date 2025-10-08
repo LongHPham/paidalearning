@@ -120,7 +120,7 @@ class UDPLikeCommunicator {
 
 // Game room management
 class GameRoom {
-  constructor(roomId) {
+  constructor(roomId, isBotMode = false, questionCount = 10) {
     this.roomId = roomId;
     this.players = new Map();
     this.gameState = 'waiting'; // waiting, playing, finished
@@ -128,12 +128,15 @@ class GameRoom {
     this.questionStartTime = null;
     this.scores = new Map();
     this.roundNumber = 0;
-    this.maxRounds = 10;
+    this.maxRounds = questionCount;
     this.gameStartTime = null;
+    this.isBotMode = isBotMode;
+    this.botPlayer = null;
+    this.botDifficulty = 0.5; // Bot's current difficulty level
   }
 
   addPlayer(playerId, socket) {
-    if (this.players.size >= MAX_PLAYERS_PER_ROOM) {
+    if (this.players.size >= MAX_PLAYERS_PER_ROOM && !this.isBotMode) {
       return false;
     }
     
@@ -148,6 +151,24 @@ class GameRoom {
     
     socket.join(this.roomId);
     return true;
+  }
+
+  addBotPlayer() {
+    if (this.isBotMode && !this.botPlayer) {
+      const botId = 'bot_' + this.roomId;
+      this.botPlayer = {
+        id: botId,
+        score: 0,
+        questionsAnswered: 0,
+        correctAnswers: 0,
+        avgResponseTime: 0,
+        isReady: true,
+        difficulty: this.botDifficulty
+      };
+      this.players.set(botId, this.botPlayer);
+      return true;
+    }
+    return false;
   }
 
   removePlayer(playerId) {
@@ -181,6 +202,11 @@ class GameRoom {
       player.correctAnswers = 0;
     }
     
+    // Add bot player if in bot mode
+    if (this.isBotMode) {
+      this.addBotPlayer();
+    }
+    
     this.nextRound();
   }
 
@@ -206,13 +232,51 @@ class GameRoom {
     
     // Send the SAME question to all players
     for (const [playerId, player] of this.players) {
-      player.socket.emit('newQuestion', { 
-        question: question.question, 
-        round: this.roundNumber,
-        totalRounds: this.maxRounds,
-        difficulty: question.difficulty
-      });
+      if (player.socket) { // Real player
+        player.socket.emit('newQuestion', { 
+          question: question.question, 
+          round: this.roundNumber,
+          totalRounds: this.maxRounds,
+          difficulty: question.difficulty
+        });
+      }
     }
+
+    // If bot mode, make bot answer after a delay
+    if (this.isBotMode && this.botPlayer) {
+      this.simulateBotAnswer(question);
+    }
+  }
+
+  simulateBotAnswer(question) {
+    // Calculate bot response time based on difficulty and performance
+    const baseTime = 2 + (question.difficulty === 'hard' ? 3 : question.difficulty === 'medium' ? 2 : 1);
+    const variation = Math.random() * 1.5; // Add some randomness
+    const responseTime = baseTime + variation;
+    
+    // Calculate bot accuracy based on current difficulty
+    const accuracy = Math.max(0.4, Math.min(0.85, this.botDifficulty + (Math.random() - 0.5) * 0.2));
+    const isCorrect = Math.random() < accuracy;
+    
+    // Bot answers correctly or incorrectly
+    const answer = isCorrect ? question.answer : this.generateWrongAnswer(question.answer);
+    
+    console.log(`Bot answering: ${answer} (correct: ${question.answer}, isCorrect: ${isCorrect})`);
+    
+    // Process bot answer after delay
+    setTimeout(() => {
+      this.processAnswer(this.botPlayer.id, answer, responseTime);
+    }, responseTime * 1000);
+  }
+
+  generateWrongAnswer(correctAnswer) {
+    // Generate a plausible wrong answer
+    const numAnswer = parseInt(correctAnswer);
+    if (!isNaN(numAnswer)) {
+      const variation = Math.floor(Math.random() * 10) + 1;
+      return Math.random() < 0.5 ? (numAnswer + variation).toString() : (numAnswer - variation).toString();
+    }
+    return 'wrong';
   }
 
   async processAnswer(playerId, answer, responseTime) {
@@ -255,6 +319,11 @@ class GameRoom {
       player.avgResponseTime = (player.avgResponseTime * (player.questionsAnswered - 1) + responseTime) / player.questionsAnswered;
     }
     
+    // Update bot difficulty based on player performance
+    if (this.isBotMode && playerId !== this.botPlayer.id) {
+      this.adjustBotDifficulty(player.accuracy);
+    }
+    
     // Update ML system with performance data (with error handling)
     try {
       mlGenerator.updatePlayerPerformance(
@@ -268,16 +337,32 @@ class GameRoom {
       // Continue without ML update
     }
     
-    // Send result to player
-    player.socket.emit('answerResult', {
-      correct: isCorrect,
-      score: score,
-      totalScore: player.score,
-      correctAnswer: this.currentQuestion.answer,
-      responseTime: responseTime,
-      accuracy: player.accuracy,
-      avgResponseTime: player.avgResponseTime
-    });
+    // Send result to player (only if it's a real player)
+    if (player.socket) {
+      player.socket.emit('answerResult', {
+        correct: isCorrect,
+        score: score,
+        totalScore: player.score,
+        correctAnswer: this.currentQuestion.answer,
+        responseTime: responseTime,
+        accuracy: player.accuracy,
+        avgResponseTime: player.avgResponseTime
+      });
+    }
+    
+    // If this is a bot answer, notify the real player
+    if (this.isBotMode && playerId === this.botPlayer.id && this.players.size > 1) {
+      const realPlayer = Array.from(this.players.values()).find(p => p.socket);
+      if (realPlayer) {
+        realPlayer.socket.emit('botAnswer', {
+          botAnswer: answer,
+          correct: isCorrect,
+          correctAnswer: this.currentQuestion.answer,
+          botScore: player.score,
+          botAccuracy: player.accuracy
+        });
+      }
+    }
     
     // Check if all players have answered
     const allAnswered = Array.from(this.players.values())
@@ -293,17 +378,32 @@ class GameRoom {
           accuracy: p.correctAnswers / p.questionsAnswered
         }));
         
-        // Send round results to all players in the room
+        // Send round results to all real players in the room
         for (const [playerId, player] of this.players) {
-          player.socket.emit('roundResults', {
-            round: this.roundNumber,
-            results: roundResults
-          });
+          if (player.socket) {
+            player.socket.emit('roundResults', {
+              round: this.roundNumber,
+              results: roundResults
+            });
+          }
         }
         
         // Wait a bit then start next round
         setTimeout(() => this.nextRound(), 2000);
       }, 2000); // 2 second delay to show individual results
+    }
+  }
+
+  adjustBotDifficulty(playerAccuracy) {
+    // Adjust bot difficulty to match player performance
+    if (playerAccuracy > 0.8) {
+      this.botDifficulty = Math.min(0.9, this.botDifficulty + 0.1);
+    } else if (playerAccuracy < 0.5) {
+      this.botDifficulty = Math.max(0.3, this.botDifficulty - 0.1);
+    }
+    
+    if (this.botPlayer) {
+      this.botPlayer.difficulty = this.botDifficulty;
     }
   }
 
@@ -376,10 +476,14 @@ io.on('connection', async (socket) => {
       
       try {
         let room = gameRooms.get(roomId);
+        let isFirstPlayer = false;
         
         if (!room) {
-          room = new GameRoom(roomId);
+          // First player creates room and can set question count
+          const questionCount = data.questionCount || 10;
+          room = new GameRoom(roomId, false, questionCount);
           gameRooms.set(roomId, room);
+          isFirstPlayer = true;
         }
         
         const success = room.addPlayer(playerId, socket);
@@ -390,7 +494,9 @@ io.on('connection', async (socket) => {
           socket.emit('roomJoined', {
             roomId,
             playerCount: room.players.size,
-            maxPlayers: MAX_PLAYERS_PER_ROOM
+            maxPlayers: MAX_PLAYERS_PER_ROOM,
+            isFirstPlayer: isFirstPlayer,
+            questionCount: room.maxRounds
           });
           
           // Notify other players
@@ -414,6 +520,65 @@ io.on('connection', async (socket) => {
     } catch (error) {
       console.error('Error joining room:', error);
       socket.emit('error', { message: 'Failed to join room' });
+    }
+  });
+
+  // Start bot game
+  socket.on('startBotGame', async (data) => {
+    try {
+      const roomId = 'bot_' + playerId;
+      
+      // Create bot room
+      const room = new GameRoom(roomId, true, data.questionCount);
+      gameRooms.set(roomId, room);
+      
+      // Add player to bot room
+      const success = room.addPlayer(playerId, socket);
+      
+      if (success) {
+        playerSessions.get(playerId).currentRoom = roomId;
+        
+        // Add bot player
+        room.addBotPlayer();
+        
+        socket.emit('roomJoined', {
+          roomId,
+          playerCount: 2, // Player + Bot
+          maxPlayers: 2,
+          isBotMode: true
+        });
+        
+        // Start bot game immediately
+        setTimeout(() => {
+          console.log('Starting bot game...');
+          room.startGame();
+        }, 1000);
+      }
+    } catch (error) {
+      console.error('Error starting bot game:', error);
+      socket.emit('error', { message: 'Failed to start bot game' });
+    }
+  });
+
+  // Update room settings
+  socket.on('updateRoomSettings', async (data) => {
+    try {
+      const session = playerSessions.get(playerId);
+      if (!session || !session.currentRoom) {
+        socket.emit('error', { message: 'Not in a room' });
+        return;
+      }
+      
+      const room = gameRooms.get(session.currentRoom);
+      if (room && room.gameState === 'waiting') {
+        room.maxRounds = data.questionCount;
+        socket.emit('roomSettingsUpdated', {
+          questionCount: room.maxRounds
+        });
+      }
+    } catch (error) {
+      console.error('Error updating room settings:', error);
+      socket.emit('error', { message: 'Failed to update room settings' });
     }
   });
 

@@ -436,8 +436,23 @@
 
     <div class="button-group">
       <button id="joinRoomBtn" class="btn-primary">Join Game Room</button>
+      <button id="playWithBotBtn" class="btn-secondary">Play with Bot</button>
       <button id="playAgainBtn" class="btn-secondary" style="display: none;">Play Again</button>
       <button id="submitAnswerBtn" class="btn-success" disabled>Submit Answer</button>
+    </div>
+
+    <div id="gameSettings" class="panel" style="display: none; margin-top: 20px;">
+      <h3>🎮 Game Settings</h3>
+      <div style="margin-bottom: 15px;">
+        <label for="questionCount" style="display: block; margin-bottom: 5px; font-weight: bold;">Number of Questions:</label>
+        <select id="questionCount" style="width: 100%; padding: 10px; border: 2px solid #667eea; border-radius: 5px; font-size: 1.1em;">
+          <option value="5">5 Questions</option>
+          <option value="10" selected>10 Questions</option>
+          <option value="15">15 Questions</option>
+          <option value="20">20 Questions</option>
+        </select>
+      </div>
+      <button id="startGameBtn" class="btn-primary" style="width: 100%;">Start Game</button>
     </div>
 
     <div id="playersList" class="players-list" style="display: none;">
@@ -498,6 +513,20 @@
         </ul>
       </div>
     </div>
+
+    <div id="botScorePanel" class="panel" style="display: none;">
+      <h3>🤖 Bot Opponent</h3>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-value" id="botScore">0</div>
+          <div class="stat-label">Bot Score</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="botAccuracy">0%</div>
+          <div class="stat-label">Bot Accuracy</div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -511,6 +540,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let playerId = null;
   let questionStartTime = null;
   let questionTimer = null;
+  let isBotMode = false;
+  let isFirstPlayer = false;
+  let gameSettings = {
+    questionCount: 10,
+    isBotMode: false
+  };
   let playerStats = {
     score: 0,
     accuracy: 0,
@@ -527,7 +562,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        playerStats = { ...playerStats, ...parsed };
+        // Only load persistent stats, not current game stats
+        playerStats.totalScore = parsed.totalScore || 0;
+        playerStats.totalAccuracy = parsed.totalAccuracy || 0;
+        playerStats.avgResponse = parsed.avgResponse || 0;
+        playerStats.performanceTrend = parsed.performanceTrend || 'stable';
         updatePlayerStats(playerStats);
       } catch (e) {
         console.log('Could not load saved stats');
@@ -537,7 +576,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Save stats to localStorage
   function savePlayerStats() {
-    localStorage.setItem('mathGameStats', JSON.stringify(playerStats));
+    // Only save persistent stats, not current game stats
+    const persistentStats = {
+      totalScore: playerStats.totalScore,
+      totalAccuracy: playerStats.totalAccuracy,
+      avgResponse: playerStats.avgResponse,
+      performanceTrend: playerStats.performanceTrend
+    };
+    localStorage.setItem('mathGameStats', JSON.stringify(persistentStats));
   }
 
   // DOM elements
@@ -555,6 +601,7 @@ document.addEventListener('DOMContentLoaded', () => {
     questionTimer: document.getElementById('questionTimer'),
     answerInput: document.getElementById('answerInput'),
     joinRoomBtn: document.getElementById('joinRoomBtn'),
+    playWithBotBtn: document.getElementById('playWithBotBtn'),
     playAgainBtn: document.getElementById('playAgainBtn'),
     submitAnswerBtn: document.getElementById('submitAnswerBtn'),
     playersList: document.getElementById('playersList'),
@@ -565,7 +612,13 @@ document.addEventListener('DOMContentLoaded', () => {
     totalAccuracy: document.getElementById('totalAccuracy'),
     avgResponse: document.getElementById('avgResponse'),
     performanceTrend: document.getElementById('performanceTrend'),
-    notification: document.getElementById('notification')
+    notification: document.getElementById('notification'),
+    gameSettings: document.getElementById('gameSettings'),
+    questionCount: document.getElementById('questionCount'),
+    startGameBtn: document.getElementById('startGameBtn'),
+    botScorePanel: document.getElementById('botScorePanel'),
+    botScore: document.getElementById('botScore'),
+    botAccuracy: document.getElementById('botAccuracy')
   };
 
   // Utility functions
@@ -659,12 +712,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
   socket.on('roomJoined', (data) => {
     currentRoom = data.roomId;
-    if (data.playerCount < data.maxPlayers) {
+    isFirstPlayer = data.isFirstPlayer || false;
+    
+    if (data.isFirstPlayer) {
+      // First player can set game settings
+      elements.gameSettings.style.display = 'block';
+      elements.joinRoomBtn.style.display = 'none';
+      elements.playWithBotBtn.style.display = 'none';
+      updateGameState('waiting', `You're the first player! Set game settings and wait for another player...`);
+      showNotification(`You're the first player! Choose your settings.`, 'info');
+    } else if (data.isBotMode) {
+      // Bot mode
+      elements.botScorePanel.style.display = 'block';
+      updateGameState('waiting', `Bot game starting...`);
+      showNotification(`Bot game starting!`, 'info');
+    } else if (data.playerCount < data.maxPlayers) {
       updateGameState('waiting', `Joined room ${data.roomId}. Waiting for another player...`);
+      elements.joinRoomBtn.disabled = true;
     } else {
       updateGameState('waiting', `Room full! Game starting soon...`);
+      elements.joinRoomBtn.disabled = true;
     }
-    elements.joinRoomBtn.disabled = true;
+    
     showNotification(`Joined room ${data.roomId}`, 'success');
   });
 
@@ -735,6 +804,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Show play again button
     elements.playAgainBtn.style.display = 'block';
     elements.joinRoomBtn.style.display = 'none';
+    elements.botScorePanel.style.display = 'none';
     
     const winner = data.results[0];
     if (winner.playerId === playerId) {
@@ -763,11 +833,25 @@ document.addEventListener('DOMContentLoaded', () => {
   socket.on('playerStats', (data) => {
     const stats = data.stats;
     updatePlayerStats({
-      totalScore: stats.totalScore,
-      totalAccuracy: stats.recentAccuracy,
-      avgResponse: stats.avgResponseTime,
-      performanceTrend: stats.performanceTrend
+      totalScore: stats.totalScore || 0,
+      totalAccuracy: stats.recentAccuracy || 0,
+      avgResponse: stats.avgResponseTime || 0,
+      performanceTrend: stats.performanceTrend || 'stable'
     });
+  });
+
+  socket.on('roomSettingsUpdated', (data) => {
+    showNotification(`Game set to ${data.questionCount} questions!`, 'success');
+  });
+
+  socket.on('botAnswer', (data) => {
+    const botResult = data.correct ? '✅ Correct' : '❌ Wrong';
+    const message = `Bot answered: ${data.botAnswer} (${botResult}) | Bot Score: ${data.botScore}`;
+    showNotification(message, data.correct ? 'success' : 'error');
+    
+    // Update bot score display
+    elements.botScore.textContent = Math.round(data.botScore);
+    elements.botAccuracy.textContent = `${Math.round(data.botAccuracy * 100)}%`;
   });
 
   socket.on('error', (data) => {
@@ -778,7 +862,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Event listeners
   elements.joinRoomBtn.addEventListener('click', () => {
+    isBotMode = false;
+    gameSettings.isBotMode = false;
     socket.emit('joinRoom', { roomId: 'default' });
+  });
+
+  elements.playWithBotBtn.addEventListener('click', () => {
+    isBotMode = true;
+    gameSettings.isBotMode = true;
+    elements.gameSettings.style.display = 'block';
+    elements.joinRoomBtn.style.display = 'none';
+    elements.playWithBotBtn.style.display = 'none';
+    updateGameState('waiting', 'Choose your game settings and start playing with the bot!');
+    showNotification('Bot mode selected! Choose your settings.', 'info');
+  });
+
+  elements.startGameBtn.addEventListener('click', () => {
+    gameSettings.questionCount = parseInt(elements.questionCount.value);
+    
+    if (isBotMode) {
+      socket.emit('startBotGame', {
+        questionCount: gameSettings.questionCount,
+        isBotMode: true
+      });
+      updateGameState('waiting', 'Starting bot game...');
+    } else {
+      // Update room settings for multiplayer
+      socket.emit('updateRoomSettings', {
+        roomId: currentRoom,
+        questionCount: gameSettings.questionCount
+      });
+      updateGameState('waiting', 'Game settings updated! Waiting for another player...');
+    }
+    
+    elements.gameSettings.style.display = 'none';
   });
 
   // Ready button removed - game starts automatically
@@ -787,21 +904,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // Reset UI for new game
     elements.playAgainBtn.style.display = 'none';
     elements.joinRoomBtn.style.display = 'block';
+    elements.playWithBotBtn.style.display = 'block';
     elements.joinRoomBtn.disabled = false;
     elements.joinRoomBtn.textContent = 'Join Game Room';
+    elements.gameSettings.style.display = 'none';
     
     // Reset game state
     updateGameState('connected', 'Ready to join a new game!');
     
-    // Reset stats display
+    // Reset current game stats but keep total stats
     updatePlayerStats({
       score: 0,
       accuracy: 0,
-      responseTime: 0,
-      totalScore: 0,
-      totalAccuracy: 0,
-      avgResponse: 0,
-      performanceTrend: 'stable'
+      responseTime: 0
     });
     
     showNotification('Ready for a new game!', 'info');
