@@ -240,6 +240,16 @@ class GameRoom {
     player.questionsAnswered++;
     if (isCorrect) player.correctAnswers++;
     
+    // Calculate current accuracy
+    player.accuracy = player.questionsAnswered > 0 ? player.correctAnswers / player.questionsAnswered : 0;
+    
+    // Update average response time
+    if (player.questionsAnswered === 1) {
+      player.avgResponseTime = responseTime;
+    } else {
+      player.avgResponseTime = (player.avgResponseTime * (player.questionsAnswered - 1) + responseTime) / player.questionsAnswered;
+    }
+    
     // Update ML system with performance data (with error handling)
     try {
       mlGenerator.updatePlayerPerformance(
@@ -259,7 +269,9 @@ class GameRoom {
       score: score,
       totalScore: player.score,
       correctAnswer: this.currentQuestion.answer,
-      responseTime: responseTime
+      responseTime: responseTime,
+      accuracy: player.accuracy,
+      avgResponseTime: player.avgResponseTime
     });
     
     // Check if all players have answered

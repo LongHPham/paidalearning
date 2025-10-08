@@ -569,11 +569,25 @@ document.addEventListener('DOMContentLoaded', () => {
   function updatePlayerStats(stats) {
     playerStats = { ...playerStats, ...stats };
     elements.playerScore.textContent = playerStats.score;
-    elements.playerAccuracy.textContent = `${Math.round(playerStats.accuracy * 100)}%`;
-    elements.responseTime.textContent = `${playerStats.responseTime.toFixed(1)}s`;
+    
+    // Fix accuracy calculation - ensure it's a number and not NaN
+    const accuracy = isNaN(playerStats.accuracy) ? 0 : playerStats.accuracy;
+    elements.playerAccuracy.textContent = `${Math.round(accuracy * 100)}%`;
+    
+    // Fix response time display
+    const responseTime = isNaN(playerStats.responseTime) ? 0 : playerStats.responseTime;
+    elements.responseTime.textContent = `${responseTime.toFixed(1)}s`;
+    
     elements.totalScore.textContent = playerStats.totalScore;
-    elements.totalAccuracy.textContent = `${Math.round(playerStats.totalAccuracy * 100)}%`;
-    elements.avgResponse.textContent = `${playerStats.avgResponse.toFixed(1)}s`;
+    
+    // Fix total accuracy calculation
+    const totalAccuracy = isNaN(playerStats.totalAccuracy) ? 0 : playerStats.totalAccuracy;
+    elements.totalAccuracy.textContent = `${Math.round(totalAccuracy * 100)}%`;
+    
+    // Fix average response time
+    const avgResponse = isNaN(playerStats.avgResponse) ? 0 : playerStats.avgResponse;
+    elements.avgResponse.textContent = `${avgResponse.toFixed(1)}s`;
+    
     elements.performanceTrend.textContent = playerStats.performanceTrend;
   }
 
@@ -640,6 +654,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (data.allReady) {
       updateGameState('playing', 'All players ready! Game starting...');
       elements.readyBtn.disabled = true;
+      elements.readyBtn.textContent = 'Game Started';
       elements.answerInput.disabled = false;
       elements.answerInput.focus();
     } else {
@@ -671,7 +686,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const responseTime = data.responseTime;
     updatePlayerStats({
       score: data.totalScore,
-      responseTime: responseTime
+      responseTime: responseTime,
+      accuracy: data.accuracy,
+      avgResponse: data.avgResponseTime
     });
     
     if (data.correct) {
@@ -690,6 +707,10 @@ document.addEventListener('DOMContentLoaded', () => {
     updateGameState('finished', 'Game finished!');
     elements.answerInput.disabled = true;
     elements.submitAnswerBtn.disabled = true;
+    
+    // Reset ready button for new game
+    elements.readyBtn.disabled = false;
+    elements.readyBtn.textContent = 'Ready';
     
     const winner = data.results[0];
     if (winner.playerId === playerId) {
